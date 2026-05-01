@@ -1,0 +1,50 @@
+# === Flutter / Dart ===
+.dart_tool/
+build/
+*.lock
+*.iml
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+
+# === Android ===
+android/.gradle/
+android/app/build/
+android/.idea/
+*.apk
+*.aab
+
+# === iOS / macOS ===
+ios/Flutter/ephemeral/
+ios/Pods/
+macos/Flutter/ephemeral/
+macos/Pods/
+
+# === Web ===
+web/build/
+
+# === Go ===
+bin/
+*.exe
+*.test
+coverage.out
+*.prof
+
+# === IDE и редакторы ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === Env и секреты ===
+.env
+*.log
+secrets/
+
+# === macOS системные ===
+.DS_Store
+.localized
+.AppleDouble
+*.DS_Store?
+._*
