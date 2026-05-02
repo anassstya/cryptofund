@@ -10,13 +10,19 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type Service struct {
-	repo      *Repository
+type Repository interface {
+	AddUser(ctx context.Context, email, hash string) error
+	GetUserID(ctx context.Context, email string) (string, error)
+	GetPasswordHash(ctx context.Context, email string) (string, error)
+}
+
+type ServiceAuth struct {
+	repo      Repository
 	jwtSecret []byte
 }
 
-func NewService(repo *Repository, jwtSecret string) *Service {
-	return &Service{
+func NewService(repo Repository, jwtSecret string) *ServiceAuth {
+	return &ServiceAuth{
 		repo:      repo,
 		jwtSecret: []byte(jwtSecret),
 	}
@@ -28,7 +34,7 @@ type UserClaims struct {
 	jwt.RegisteredClaims
 }
 
-func (s *Service) generateToken(userID, email string) (string, error) {
+func (s *ServiceAuth) generateToken(userID, email string) (string, error) {
 	claims := &UserClaims{
 		UserID: userID,
 		Email:  email,
@@ -48,23 +54,22 @@ func (s *Service) generateToken(userID, email string) (string, error) {
 	return signedToken, nil
 }
 
-func (s *Service) RegisterService(ctx context.Context, data RegisterRequest) (ResponseAuth, error) {
+func (s *ServiceAuth) RegisterService(ctx context.Context, data RegisterRequest) (ResponseAuth, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(data.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return ResponseAuth{}, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	err = s.repo.AddUser(ctx, data.Email, string(hash))
-	if err != nil {
+	if err := s.repo.AddUser(ctx, data.Email, string(hash)); err != nil {
 		if errors.Is(err, ErrUserAlreadyExists) {
 			return ResponseAuth{}, ErrUserAlreadyExists
 		}
 		return ResponseAuth{}, fmt.Errorf("failed to add user: %w", err)
 	}
 
-	userID, err := s.repo.GetUser(ctx, data.Email)
+	userID, err := s.repo.GetUserID(ctx, data.Email)
 	if err != nil {
-		return ResponseAuth{}, fmt.Errorf("eror getting id: %w", err)
+		return ResponseAuth{}, fmt.Errorf("eror getting user ID: %w", err)
 	}
 
 	token, err := s.generateToken(userID, data.Email)
@@ -72,11 +77,36 @@ func (s *Service) RegisterService(ctx context.Context, data RegisterRequest) (Re
 		return ResponseAuth{}, fmt.Errorf("generate token: %w", err)
 	}
 
-	var response = ResponseAuth{
+	return ResponseAuth{
 		Token:  token,
 		UserID: userID,
 		Email:  data.Email,
+	}, nil
+}
+
+func (s *ServiceAuth) LoginService(ctx context.Context, data LoginRequest) (ResponseAuth, error) {
+	hash, err := s.repo.GetPasswordHash(ctx, data.Email)
+	if err != nil {
+		return ResponseAuth{}, ErrInvalidCredentials
 	}
 
-	return response, nil
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(data.Password)); err != nil {
+		return ResponseAuth{}, ErrInvalidCredentials
+	}
+
+	userID, err := s.repo.GetUserID(ctx, data.Email)
+	if err != nil {
+		return ResponseAuth{}, fmt.Errorf("failed to get user ID: %w", err)
+	}
+
+	token, err := s.generateToken(userID, data.Email)
+	if err != nil {
+		return ResponseAuth{}, fmt.Errorf("generate token: %w", err)
+	}
+
+	return ResponseAuth{
+		Token:  token,
+		UserID: userID,
+		Email:  data.Email,
+	}, nil
 }
