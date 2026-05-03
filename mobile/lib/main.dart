@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'screens/register_screen.dart';
+import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
-import 'blocs/register/register_cubit.dart';
+import 'blocs/register_cubit.dart';
 
 void main() {
   runApp(const CryptoFundApp());
@@ -27,6 +28,7 @@ class CryptoFundApp extends StatelessWidget {
 
       routes: {
         '/home': (context) => const HomeScreen(),
+        '/login': (context) => const LoginScreen(),
       },
       debugShowCheckedModeBanner: false,
     );
