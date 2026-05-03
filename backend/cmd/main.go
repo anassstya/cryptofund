@@ -20,18 +20,34 @@ func main() {
 		log.Fatal("DATABASE_URL and JWT_SECRET must be set in environment")
 	}
 
+	ctx := context.Background()
+
+	var pool *pgxpool.Pool
+	var err error
+	maxRetries := 10
+
+	for i := 0; i < maxRetries; i++ {
+		pool, err = pgxpool.New(ctx, databaseURL)
+		if err == nil {
+			err = pool.Ping(ctx)
+			if err == nil {
+				log.Println("Database connected successfully!")
+				break
+			}
+			pool.Close()
+		}
+		log.Printf("Waiting for database... (attempt %d/%d): %v", i+1, maxRetries, err)
+		time.Sleep(3 * time.Second)
+	}
+	if err != nil {
+		log.Fatalf("Failed to connect to database after %d attempts: %v", maxRetries, err)
+	}
+	defer pool.Close()
+
 	if err := db.MigrateDB(databaseURL, "/app/migrations"); err != nil {
 		log.Fatalf("Migration failed: %v", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	pool, err := pgxpool.New(ctx, databaseURL)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer pool.Close()
+	log.Println("Migrations applied successfully")
 
 	authRepo := auth.NewRepository(pool)
 	authSvc := auth.NewService(authRepo, jwtSecret)
@@ -39,11 +55,10 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /register", authHdl.RegisterHandler)
-	//mux.HandleFunc("POST /login", authHdl.LoginHandler)
+	mux.HandleFunc("POST /login", authHdl.LoginHandler)
 
+	log.Println("Server starting on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }
-
-//СHI add

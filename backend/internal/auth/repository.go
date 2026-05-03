@@ -6,14 +6,19 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
-type RepositoryAuth struct {
-	db *pgxpool.Pool
+type DB interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func NewRepository(db *pgxpool.Pool) *RepositoryAuth {
+type RepositoryAuth struct {
+	db DB
+}
+
+func NewRepository(db DB) *RepositoryAuth {
 	return &RepositoryAuth{db: db}
 }
 
