@@ -4,6 +4,7 @@ import (
 	"context"
 	"cryptofund/db"
 	"cryptofund/internal/auth"
+	"cryptofund/internal/exchanges"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 func main() {
 	databaseURL := os.Getenv("DATABASE_URL")
 	jwtSecret := os.Getenv("JWT_SECRET")
+	masterKey := os.Getenv("ENCRYPTION_MASTER_KEY")
 
 	if databaseURL == "" || jwtSecret == "" {
 		log.Fatal("DATABASE_URL and JWT_SECRET must be set in environment")
@@ -53,9 +55,15 @@ func main() {
 	authSvc := auth.NewService(authRepo, jwtSecret)
 	authHdl := auth.NewHandler(authSvc)
 
+	exchangeRepo := exchanges.NewRepository(pool)
+	exchangeSvc := exchanges.NewService(exchangeRepo, masterKey)
+	exchangeHdl := exchanges.NewHandler(exchangeSvc)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /register", authHdl.RegisterHandler)
 	mux.HandleFunc("POST /login", authHdl.LoginHandler)
+
+	mux.HandleFunc("POST /exchange", auth.MiddlewareAuth(exchangeHdl.AddExchangeHandler))
 
 	log.Println("Server starting on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {

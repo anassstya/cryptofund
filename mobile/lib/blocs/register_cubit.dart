@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 abstract class RegisterState extends Equatable {
   const RegisterState();
@@ -17,11 +18,16 @@ class RegisterLoading extends RegisterState {}
 class RegisterSuccess extends RegisterState {
   final String token;
   final String userId;
+  final String email;
 
-  const RegisterSuccess({required this.token, required this.userId});
+  const RegisterSuccess({
+    required this.token,
+    required this.userId,
+    required this.email,
+  });
 
   @override
-  List<Object?> get props => [token, userId];
+  List<Object?> get props => [token, userId, email];
 }
 
 class RegisterError extends RegisterState {
@@ -45,14 +51,14 @@ class RegisterValidator {
   static String? validatePassword(String? value) {
     if (value == null || value.isEmpty) return 'Пароль обязателен';
     if (value.length < 6) return 'Минимум 6 символов';
-    if (value.length > 64) return 'Максимум 64 символа'; // ← добавлено
+    if (value.length > 64) return 'Максимум 64 символа';
     return null;
   }
 }
 
 class RegisterCubit extends Cubit<RegisterState> {
   static const _baseUrl = 'http://10.0.2.2:8080';
-  // static const _baseUrl = 'http://localhost:8080'; - браузер
+  static const _storage = FlutterSecureStorage();
 
   RegisterCubit() : super(RegisterInitial());
 
@@ -71,14 +77,27 @@ class RegisterCubit extends Cubit<RegisterState> {
       final response = await http.post(
         Uri.parse('$_baseUrl/register'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+        }),
       );
 
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
+
+        final token = data['token'] as String;
+        final userId = data['user_id'] as String;
+        final userEmail = data['email'] as String;
+
+        await _storage.write(key: 'token', value: token);
+        await _storage.write(key: 'user_id', value: userId);
+        await _storage.write(key: 'email', value: userEmail);
+
         emit(RegisterSuccess(
-          token: data['token'] ?? '',
-          userId: data['user_id'] ?? '',
+          token: token,
+          userId: userId,
+          email: userEmail,
         ));
       } else if (response.statusCode == 409) {
         emit(const RegisterError('Пользователь уже существует'));

@@ -1,6 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 
 abstract class LoginState extends Equatable {
@@ -9,13 +10,19 @@ abstract class LoginState extends Equatable {
 }
 
 class LoginInitial extends LoginState {}
+
 class LoginLoading extends LoginState {}
+
 class LoginSuccess extends LoginState {
   final String token;
   final String userId;
   final String email;
 
-  LoginSuccess({required this.token, required this.userId, required this.email});
+  LoginSuccess({
+    required this.token,
+    required this.userId,
+    required this.email,
+  });
 
   @override
   List<Object?> get props => [token, userId, email];
@@ -34,6 +41,7 @@ class LoginCubit extends Cubit<LoginState> {
   LoginCubit() : super(LoginInitial());
 
   static const _baseUrl = 'http://10.0.2.2:8080';
+  static const _storage = FlutterSecureStorage();
 
   Future<void> login(String email, String password) async {
     emit(LoginLoading());
@@ -42,15 +50,27 @@ class LoginCubit extends Cubit<LoginState> {
       final response = await http.post(
         Uri.parse('$_baseUrl/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email, 'password': password}),
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+        }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+
+        final token = data['token'] as String;
+        final userId = data['user_id'] as String;
+        final userEmail = data['email'] as String;
+
+        await _storage.write(key: 'token', value: token);
+        await _storage.write(key: 'user_id', value: userId);
+        await _storage.write(key: 'email', value: userEmail);
+
         emit(LoginSuccess(
-          token: data['token'],
-          userId: data['user_id'],
-          email: data['email'],
+          token: token,
+          userId: userId,
+          email: userEmail,
         ));
       } else if (response.statusCode == 401) {
         emit(LoginError('Неверный email или пароль'));
