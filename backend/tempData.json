@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Binance",
+    "api_key": "binance_demo_api_key_001",
+    "api_secret": "binance_demo_api_secret_001",
+    "total_balance": 1056.324,
+    "change_percent": -2.11,
+    "assets_count": 4,
+    "source": "mock"
+  },
+  {
+    "name": "Bybit",
+    "api_key": "bybit_demo_api_key_001",
+    "api_secret": "bybit_demo_api_secret_001",
+    "total_balance": 54049.553,
+    "change_percent": 5,
+    "assets_count": 8,
+    "source": "mock"
+  },
+  {
+    "name": "Bitget",
+    "api_key": "bitget_demo_api_key_001",
+    "api_secret": "bitget_demo_api_secret_001",
+    "total_balance": 1012.434,
+    "change_percent": -0.4,
+    "assets_count": 3,
+    "source": "mock"
+  },
+  {
+    "name": "Mexc",
+    "api_key": "mexc_demo_api_key_001",
+    "api_secret": "mexc_demo_api_secret_001",
+    "total_balance": 93291.001,
+    "change_percent": -0.4,
+    "assets_count": 12,
+    "source": "mock"
+  },
+  {
+    "name": "Gate",
+    "api_key": "gate_demo_api_key_001",
+    "api_secret": "gate_demo_api_secret_001",
+    "total_balance": 204.030,
+    "change_percent": 0.23,
+    "assets_count": 2,
+    "source": "mock"
+  }
+]

@@ -14,21 +14,171 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
   final _apiSecretController = TextEditingController();
   final _exchangeApiService = ExchangeApiService();
 
+  final LayerLink _exchangeLayerLink = LayerLink();
+  final GlobalKey _exchangeFieldKey = GlobalKey();
+
+  OverlayEntry? _exchangeOverlayEntry;
+
   String? _selectedExchange;
   bool _isLoading = false;
+  bool _isExchangeDropdownOpen = false;
 
   final List<String> _exchanges = [
     'Binance',
     'Bybit',
     'Bitget',
+    'Gate',
     'Mexc',
   ];
 
   @override
   void dispose() {
+    _hideExchangeDropdown();
     _apiKeyController.dispose();
     _apiSecretController.dispose();
     super.dispose();
+  }
+
+  String? _exchangeHint() {
+    switch (_selectedExchange) {
+      case 'Bitget':
+        return 'Bitget пока работает только с demo/mock ключами.';
+      case 'Gate':
+        return 'Для Gate используйте API v4 Key с правами Read-only.';
+      case 'Bybit':
+        return 'Для Bybit включите Read-only и Unified Trading.';
+      case 'Binance':
+        return 'Для Binance нужен Spot Read-only API ключ.';
+      case 'Mexc':
+        return 'Для MEXC нужен Spot Account Read-only API ключ.';
+      default:
+        return null;
+    }
+  }
+
+  void _toggleExchangeDropdown() {
+    FocusScope.of(context).unfocus();
+
+    if (_isExchangeDropdownOpen) {
+      _hideExchangeDropdown();
+    } else {
+      _showExchangeDropdown();
+    }
+  }
+
+  void _showExchangeDropdown() {
+    final overlay = Overlay.of(context);
+    final renderBox =
+        _exchangeFieldKey.currentContext?.findRenderObject() as RenderBox?;
+
+    if (renderBox == null) return;
+
+    final width = renderBox.size.width;
+
+    setState(() => _isExchangeDropdownOpen = true);
+
+    _exchangeOverlayEntry = OverlayEntry(
+      builder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _hideExchangeDropdown,
+                child: const SizedBox.expand(),
+              ),
+            ),
+            CompositedTransformFollower(
+              link: _exchangeLayerLink,
+              showWhenUnlinked: false,
+              offset: const Offset(0, 64),
+              child: Material(
+                color: Colors.transparent,
+                child: SizedBox(
+                  width: width,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF101510),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(
+                        color: const Color(0xFF6FCF97).withOpacity(0.24),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.45),
+                          blurRadius: 28,
+                          offset: const Offset(0, 14),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: _exchanges
+                            .map((exchange) => _buildExchangeDropdownItem(exchange))
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    overlay.insert(_exchangeOverlayEntry!);
+  }
+
+  void _hideExchangeDropdown() {
+    _exchangeOverlayEntry?.remove();
+    _exchangeOverlayEntry = null;
+
+    if (mounted && _isExchangeDropdownOpen) {
+      setState(() => _isExchangeDropdownOpen = false);
+    }
+  }
+
+  Widget _buildExchangeDropdownItem(String exchange) {
+    final isSelected = _selectedExchange == exchange;
+
+    return InkWell(
+      onTap: () {
+        setState(() => _selectedExchange = exchange);
+        _hideExchangeDropdown();
+      },
+      child: Container(
+        height: 58,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF6FCF97).withOpacity(0.14)
+              : Colors.transparent,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                exchange,
+                style: TextStyle(
+                  color: isSelected ? const Color(0xFF6FCF97) : Colors.white,
+                  fontSize: 16,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ),
+            if (isSelected)
+              const Icon(
+                Icons.check_rounded,
+                color: Color(0xFF6FCF97),
+                size: 22,
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _submit() async {
@@ -41,6 +191,8 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
       );
       return;
     }
+
+    _hideExchangeDropdown();
 
     setState(() => _isLoading = true);
 
@@ -65,7 +217,7 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ошибка сохранения: $e'),
+            content: Text(e.toString()),
             backgroundColor: Colors.red,
           ),
         );
@@ -80,6 +232,7 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final horizontalPadding = screenWidth > 600 ? 48.0 : 24.0;
     final isTablet = screenWidth > 600;
+    final hint = _exchangeHint();
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E0A),
@@ -88,11 +241,18 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            _hideExchangeDropdown();
+            Navigator.pop(context);
+          },
         ),
         title: const Text(
           'Добавить биржу',
-          style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
       body: SafeArea(
@@ -102,6 +262,7 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 600),
               child: SingleChildScrollView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -119,7 +280,10 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
                       const SizedBox(height: 8),
                       Text(
                         'Выберите биржу и введите API данные',
-                        style: TextStyle(color: Colors.grey[500], fontSize: 14),
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 14,
+                        ),
                       ),
                       const SizedBox(height: 40),
 
@@ -133,32 +297,72 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF141814),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey[800]!),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedExchange,
-                            isExpanded: true,
-                            hint: const Text('Выберите биржу', style: TextStyle(color: Colors.grey)),
-                            dropdownColor: const Color(0xFF141814),
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                            items: _exchanges
-                                .map((exchange) => DropdownMenuItem(
-                                      value: exchange,
-                                      child: Text(exchange),
-                                    ))
-                                .toList(),
-                            onChanged: (value) => setState(() => _selectedExchange = value),
+
+                      CompositedTransformTarget(
+                        link: _exchangeLayerLink,
+                        child: GestureDetector(
+                          key: _exchangeFieldKey,
+                          onTap: _toggleExchangeDropdown,
+                          child: Container(
+                            height: 56,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF141814),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _isExchangeDropdownOpen
+                                    ? const Color(0xFF6FCF97)
+                                    : Colors.grey[800]!,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _selectedExchange ?? 'Выберите биржу',
+                                    style: TextStyle(
+                                      color: _selectedExchange == null
+                                          ? Colors.grey
+                                          : Colors.white,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ),
+                                AnimatedRotation(
+                                  turns: _isExchangeDropdownOpen ? 0.5 : 0,
+                                  duration: const Duration(milliseconds: 180),
+                                  child: const Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
 
-                      const SizedBox(height: 24),
+                      SizedBox(
+                        height: 42,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 180),
+                            child: hint == null
+                                ? const SizedBox.shrink()
+                                : Text(
+                                    hint,
+                                    key: ValueKey(hint),
+                                    style: TextStyle(
+                                      color: Colors.grey[500],
+                                      fontSize: 12,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+
                       const Text(
                         'API KEY',
                         style: TextStyle(
@@ -173,7 +377,9 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
                         controller: _apiKeyController,
                         style: const TextStyle(color: Colors.white),
                         decoration: _inputDecoration('Введите API ключ'),
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Введите API ключ' : null,
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Введите API ключ'
+                            : null,
                       ),
 
                       const SizedBox(height: 24),
@@ -192,7 +398,9 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
                         obscureText: true,
                         style: const TextStyle(color: Colors.white),
                         decoration: _inputDecoration('Введите секретный ключ'),
-                        validator: (v) => v == null || v.trim().isEmpty ? 'Введите API Secret' : null,
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Введите API Secret'
+                            : null,
                       ),
 
                       const SizedBox(height: 40),
@@ -205,7 +413,9 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
                             backgroundColor: const Color(0xFF6FCF97),
                             foregroundColor: Colors.black,
                             elevation: 0,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                           ),
                           child: _isLoading
                               ? const SizedBox(
@@ -213,12 +423,17 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
                                   width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.black,
+                                    ),
                                   ),
                                 )
                               : const Text(
                                   'Добавить биржу',
-                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                         ),
                       ),
@@ -232,12 +447,19 @@ class _AddExchangeScreenState extends State<AddExchangeScreen> {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.info_outline, color: Colors.grey[400], size: 20),
+                            Icon(
+                              Icons.info_outline,
+                              color: Colors.grey[400],
+                              size: 20,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 'API ключи отправляются на сервер и хранятся в зашифрованном виде. Никогда не делитесь ими!',
-                                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ],

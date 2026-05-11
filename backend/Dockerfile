@@ -12,5 +12,6 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /app
 COPY --from=builder /app/app .
 COPY migrations/ ./migrations/
+COPY tempData.json ./tempData.json
 EXPOSE 8080
 ENTRYPOINT ["./app"]

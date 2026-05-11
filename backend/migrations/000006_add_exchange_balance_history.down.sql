@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS idx_exchange_balance_history_exchange_id_created_at;
+
+DROP TABLE IF EXISTS exchange_balance_history;

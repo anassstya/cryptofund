@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS exchanges (
     api_secret      TEXT            NOT NULL,
     created_at      TIMESTAMPTZ         DEFAULT NOW(),
 
-    CHECK (name IN ('Mexc', 'Binance', 'Bybit', 'Bitget'))
+    CHECK (name IN ('Mexc', 'Binance', 'Bybit', 'Gate', 'Bitget'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_exchanges_user_id

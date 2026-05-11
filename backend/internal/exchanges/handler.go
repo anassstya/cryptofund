@@ -3,12 +3,17 @@ package exchanges
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 )
 
 type Service interface {
 	AddExchange(ctx context.Context, userID, name, keyAPI, secretAPI string) (ExchangeCreateResponse, error)
+	GetByUserID(ctx context.Context, userID string) ([]ExchangeCreateResponse, error)
+	GetBalanceByExchangeID(ctx context.Context, exchangeID string) (ExchangeBalanceResponse, error)
+
+	RefreshUserBalances(ctx context.Context, userID string) error
 }
 
 type HandlerExchanges struct {
@@ -59,10 +64,56 @@ func (s *HandlerExchanges) AddExchangeHandler(w http.ResponseWriter, r *http.Req
 	resp, err := s.serv.AddExchange(r.Context(), userID, exchangeData.Name, exchangeData.KeyAPI, exchangeData.SecretAPI)
 
 	if err != nil {
-		log.Printf("AddExchange failed: user_id=%s name=%s err=%v", userID, exchangeData.Name, err)
+		if errors.Is(err, ErrExchangeAlreadyExists) {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error":   "exchange_already_exists",
+				"message": "Такая биржа уже добавлена",
+			})
+			return
+		}
+
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal_server_error"})
 		return
 	}
 
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (s *HandlerExchanges) GetExchangesWithBalanceHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+		return
+	}
+
+	userID, ok := r.Context().Value("user_id").(string)
+	if !ok || userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	err := s.serv.RefreshUserBalances(r.Context(), userID)
+	if err != nil {
+		log.Printf("refresh user balances failed: user_id=%s err=%v", userID, err)
+	}
+
+	usersExchanges, err := s.serv.GetByUserID(r.Context(), userID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "error getting exchanges"})
+		return
+	}
+
+	res := make([]ExchangeBalanceResponse, 0)
+
+	for _, v := range usersExchanges {
+		a, err := s.serv.GetBalanceByExchangeID(r.Context(), v.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "error getting balance"})
+			return
+		}
+		res = append(res, a)
+	}
+
+	writeJSON(w, http.StatusOK, res)
 }

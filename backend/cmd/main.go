@@ -18,8 +18,13 @@ func main() {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	masterKey := os.Getenv("ENCRYPTION_MASTER_KEY")
 
-	if databaseURL == "" || jwtSecret == "" {
-		log.Fatal("DATABASE_URL and JWT_SECRET must be set in environment")
+	if databaseURL == "" || jwtSecret == "" || masterKey == "" {
+		log.Fatal("DATABASE_URL, JWT_SECRET and ENCRYPTION_MASTER_KEY must be set in environment")
+	}
+
+	keyLen := len([]byte(masterKey))
+	if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+		log.Fatal("ENCRYPTION_MASTER_KEY must be 16, 24 or 32 bytes")
 	}
 
 	ctx := context.Background()
@@ -62,8 +67,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /register", authHdl.RegisterHandler)
 	mux.HandleFunc("POST /login", authHdl.LoginHandler)
-
 	mux.HandleFunc("POST /exchange", auth.MiddlewareAuth(exchangeHdl.AddExchangeHandler))
+	mux.HandleFunc("GET /exchange", auth.MiddlewareAuth(exchangeHdl.GetExchangesWithBalanceHandler))
 
 	log.Println("Server starting on :8080")
 	if err := http.ListenAndServe(":8080", mux); err != nil {
