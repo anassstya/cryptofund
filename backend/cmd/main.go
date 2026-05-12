@@ -5,21 +5,24 @@ import (
 	"cryptofund/db"
 	"cryptofund/internal/auth"
 	"cryptofund/internal/exchanges"
+	"cryptofund/internal/exchanges/prices"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	databaseURL := os.Getenv("DATABASE_URL")
 	jwtSecret := os.Getenv("JWT_SECRET")
 	masterKey := os.Getenv("ENCRYPTION_MASTER_KEY")
+	redisAddr := os.Getenv("REDIS_ADDR")
 
-	if databaseURL == "" || jwtSecret == "" || masterKey == "" {
-		log.Fatal("DATABASE_URL, JWT_SECRET and ENCRYPTION_MASTER_KEY must be set in environment")
+	if databaseURL == "" || jwtSecret == "" || masterKey == "" || redisAddr == "" {
+		log.Fatal("DATABASE_URL, JWT_SECRET, ENCRYPTION_MASTER_KEY and REDIS_ADDR must be set in environment")
 	}
 
 	keyLen := len([]byte(masterKey))
@@ -43,13 +46,39 @@ func main() {
 			}
 			pool.Close()
 		}
+
 		log.Printf("Waiting for database... (attempt %d/%d): %v", i+1, maxRetries, err)
 		time.Sleep(3 * time.Second)
 	}
+
 	if err != nil {
 		log.Fatalf("Failed to connect to database after %d attempts: %v", maxRetries, err)
 	}
 	defer pool.Close()
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: redisAddr,
+	})
+	defer redisClient.Close()
+
+	for i := 0; i < maxRetries; i++ {
+		err = redisClient.Ping(ctx).Err()
+		if err == nil {
+			log.Println("Redis connected successfully!")
+			break
+		}
+
+		log.Printf("Waiting for redis... (attempt %d/%d): %v", i+1, maxRetries, err)
+		time.Sleep(3 * time.Second)
+	}
+
+	if err != nil {
+		log.Fatalf("Failed to connect to redis after %d attempts: %v", maxRetries, err)
+	}
+
+	priceCache := prices.NewPriceCache(redisClient)
+
+	go priceCache.Worker(ctx, nil)
 
 	if err := db.MigrateDB(databaseURL, "/app/migrations"); err != nil {
 		log.Fatalf("Migration failed: %v", err)
@@ -61,7 +90,7 @@ func main() {
 	authHdl := auth.NewHandler(authSvc)
 
 	exchangeRepo := exchanges.NewRepository(pool)
-	exchangeSvc := exchanges.NewService(exchangeRepo, masterKey)
+	exchangeSvc := exchanges.NewService(exchangeRepo, masterKey, priceCache)
 	exchangeHdl := exchanges.NewHandler(exchangeSvc)
 
 	mux := http.NewServeMux()

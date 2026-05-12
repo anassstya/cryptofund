@@ -34,15 +34,20 @@ type ServiceExchanges struct {
 	client    map[string]clients.ExchangeClient
 }
 
-func NewService(repo Repository, masterKey string) *ServiceExchanges {
+func NewService(repo Repository, masterKey string, priceCache ...clients.PriceCache) *ServiceExchanges {
+	var cache clients.PriceCache
+	if len(priceCache) > 0 {
+		cache = priceCache[0]
+	}
+
 	return &ServiceExchanges{
 		repo:      repo,
 		masterKey: masterKey,
 		client: map[string]clients.ExchangeClient{
-			"mexc":    clients.NewMexcClient(nil),
+			"mexc":    clients.NewMexcClient(nil, cache),
 			"bybit":   clients.NewBybitClient(nil),
-			"binance": clients.NewBinanceClient(nil),
-			"gate":    clients.NewGateClient(nil),
+			"binance": clients.NewBinanceClient(nil, cache),
+			"gate":    clients.NewGateClient(nil, cache),
 		},
 	}
 }

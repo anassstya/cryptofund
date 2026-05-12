@@ -31,17 +31,24 @@ type gateErrorResponse struct {
 
 type GateClient struct {
 	httpClient *http.Client
+	priceCache PriceCache
 }
 
-func NewGateClient(httpClient *http.Client) *GateClient {
+func NewGateClient(httpClient *http.Client, priceCache ...PriceCache) *GateClient {
 	if httpClient == nil {
 		httpClient = &http.Client{
 			Timeout: 10 * time.Second,
 		}
 	}
 
+	var cache PriceCache
+	if len(priceCache) > 0 {
+		cache = priceCache[0]
+	}
+
 	return &GateClient{
 		httpClient: httpClient,
+		priceCache: cache,
 	}
 }
 
@@ -126,12 +133,12 @@ func (g *GateClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 
 		count++
 
-		value, err := g.GetAssetValueUSDT(ctx, balance.Currency, amount)
+		price, err := g.GetAssetPriceUSDT(ctx, balance.Currency)
 		if err != nil {
 			continue
 		}
 
-		sum += value
+		sum += price * amount
 	}
 
 	return ExchangeBalanceResult{
@@ -142,15 +149,23 @@ func (g *GateClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 	}, nil
 }
 
-func (g *GateClient) GetAssetValueUSDT(ctx context.Context, currency string, amount float64) (float64, error) {
-	if amount <= 0 {
-		return 0, nil
+func (g *GateClient) GetAssetPriceUSDT(ctx context.Context, currency string) (float64, error) {
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency == "" {
+		return 0, fmt.Errorf("currency is empty")
 	}
 
-	currency = strings.ToUpper(strings.TrimSpace(currency))
-
 	if currency == "USDT" {
-		return amount, nil
+		return 1, nil
+	}
+
+	if g.priceCache != nil {
+		key := priceCacheKey("gate", currency)
+
+		cachedPrice, err := g.priceCache.GetPrice(ctx, key)
+		if err == nil {
+			return cachedPrice, nil
+		}
 	}
 
 	currencyPair := currency + "_USDT"
@@ -192,7 +207,12 @@ func (g *GateClient) GetAssetValueUSDT(ctx context.Context, currency string, amo
 		return 0, fmt.Errorf("couldn't convert gate price to float: %w", err)
 	}
 
-	return price * amount, nil
+	if g.priceCache != nil {
+		key := priceCacheKey("gate", currency)
+		_ = g.priceCache.SetPrice(ctx, key, price)
+	}
+
+	return price, nil
 }
 
 func signGate(method, requestPath, query, body, timestamp, apiSecret string) string {

@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -28,20 +30,40 @@ type PriceData struct {
 	Price  string `json:"price"`
 }
 
-type MexcClient struct {
-	httpClient *http.Client
+type PriceCache interface {
+	GetPrice(ctx context.Context, key string) (float64, error)
+	SetPrice(ctx context.Context, key string, value float64) error
 }
 
-func NewMexcClient(httpClient *http.Client) *MexcClient {
+type MexcClient struct {
+	httpClient *http.Client
+	priceCache PriceCache
+}
+
+func NewMexcClient(httpClient *http.Client, priceCache ...PriceCache) *MexcClient {
 	if httpClient == nil {
 		httpClient = &http.Client{
 			Timeout: 10 * time.Second,
 		}
 	}
 
+	var cache PriceCache
+	if len(priceCache) > 0 {
+		cache = priceCache[0]
+	}
+
 	return &MexcClient{
 		httpClient: httpClient,
+		priceCache: cache,
 	}
+}
+
+func priceCacheKey(exchangeName, asset string) string {
+	return fmt.Sprintf(
+		"price:%s:%s",
+		strings.ToLower(exchangeName),
+		strings.ToUpper(asset),
+	)
 }
 
 func (m *MexcClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecret string) (ExchangeBalanceResult, error) {
@@ -68,7 +90,6 @@ func (m *MexcClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 	req.Header.Set("X-MEXC-APIKEY", apiKey)
 
 	resp, err := m.httpClient.Do(req)
-
 	if err != nil {
 		return ExchangeBalanceResult{}, fmt.Errorf("%w: %v", ErrExchangeUnavailable, err)
 	}
@@ -90,33 +111,63 @@ func (m *MexcClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 
 	err = json.NewDecoder(resp.Body).Decode(&data)
 	if err != nil {
-		return ExchangeBalanceResult{}, fmt.Errorf("error decoding %v", err)
+		return ExchangeBalanceResult{}, fmt.Errorf("error decoding mexc response: %w", err)
 	}
-
-	balances := data.Balances
 
 	sum := 0.0
 	count := 0
-	for _, v := range balances {
+
+	for _, v := range data.Balances {
+		asset := strings.ToUpper(strings.TrimSpace(v.Asset))
+
 		free, err := strconv.ParseFloat(v.Free, 64)
 		if err != nil {
-			return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert to float %v", err)
+			return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert free balance to float: %w", err)
 		}
 
 		locked, err := strconv.ParseFloat(v.Locked, 64)
 		if err != nil {
-			return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert to float %v", err)
+			return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert locked balance to float: %w", err)
 		}
 
-		if free+locked > 0 {
-			count++
+		amount := free + locked
+		if amount <= 0 {
+			continue
+		}
 
-			p, err := m.GetAssetValueUSDT(ctx, v.Asset, free, locked)
+		count++
+
+		price := 0.0
+
+		if asset == "USDT" {
+			price = 1
+			log.Printf("MEXC price %s loaded directly as stablecoin: %.8f", asset, price)
+		} else if m.priceCache != nil {
+			key := priceCacheKey("mexc", asset)
+
+			cachedPrice, err := m.priceCache.GetPrice(ctx, key)
+			if err == nil {
+				price = cachedPrice
+			}
+		}
+
+		if price == 0 {
+			price, err = m.GetAssetValueUSDT(ctx, asset)
 			if err != nil {
+				log.Printf("MEXC price %s API loading failed: %v", asset, err)
 				continue
 			}
-			sum += p
+
+			if m.priceCache != nil {
+				key := priceCacheKey("mexc", asset)
+
+				if err := m.priceCache.SetPrice(ctx, key, price); err != nil {
+					log.Printf("MEXC price %s failed to save to Redis cache: %v", asset, err)
+				}
+			}
 		}
+
+		sum += price * amount
 	}
 
 	return ExchangeBalanceResult{
@@ -126,15 +177,22 @@ func (m *MexcClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 	}, nil
 }
 
-func (m *MexcClient) GetAssetValueUSDT(ctx context.Context, name string, free, locked float64) (float64, error) {
-	if name == "USDT" {
-		return free + locked, nil
+func (m *MexcClient) GetAssetValueUSDT(ctx context.Context, name string) (float64, error) {
+	asset := strings.ToUpper(strings.TrimSpace(name))
+
+	if asset == "" {
+		return 0, fmt.Errorf("asset name is empty")
 	}
-	url := fmt.Sprintf("https://api.mexc.com/api/v3/ticker/price?symbol=%vUSDT", name)
+
+	if asset == "USDT" {
+		return 1, nil
+	}
+
+	url := fmt.Sprintf("https://api.mexc.com/api/v3/ticker/price?symbol=%sUSDT", asset)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return 0, fmt.Errorf("couldn't get price")
+		return 0, fmt.Errorf("couldn't create mexc price request: %w", err)
 	}
 
 	resp, err := m.httpClient.Do(req)
@@ -144,20 +202,20 @@ func (m *MexcClient) GetAssetValueUSDT(ctx context.Context, name string, free, l
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("couldn't find pair")
+		return 0, fmt.Errorf("couldn't find pair %sUSDT", asset)
 	}
 
 	var res PriceData
 
 	err = json.NewDecoder(resp.Body).Decode(&res)
 	if err != nil {
-		return 0, fmt.Errorf("couldn't decode price")
+		return 0, fmt.Errorf("couldn't decode price: %w", err)
 	}
 
 	p, err := strconv.ParseFloat(res.Price, 64)
 	if err != nil {
-		return 0, fmt.Errorf("couldn't convert to float")
+		return 0, fmt.Errorf("couldn't convert price to float: %w", err)
 	}
 
-	return p * (free + locked), nil
+	return p, nil
 }

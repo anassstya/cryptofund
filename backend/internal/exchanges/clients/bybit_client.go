@@ -55,7 +55,7 @@ func (b *BybitClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecr
 	url := "https://api.bybit.com/v5/account/wallet-balance?accountType=UNIFIED"
 
 	query := "accountType=UNIFIED"
-	recvWindow := "5000"
+	recvWindow := "20000"
 	timestamp := time.Now().UnixMilli()
 	signPayload := fmt.Sprintf("%d%s%s%s", timestamp, apiKey, recvWindow, query)
 

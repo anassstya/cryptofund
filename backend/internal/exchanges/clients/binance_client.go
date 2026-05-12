@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -34,17 +35,24 @@ type binanceErrorResponse struct {
 
 type BinanceClient struct {
 	httpClient *http.Client
+	priceCache PriceCache
 }
 
-func NewBinanceClient(httpClient *http.Client) *BinanceClient {
+func NewBinanceClient(httpClient *http.Client, priceCache ...PriceCache) *BinanceClient {
 	if httpClient == nil {
 		httpClient = &http.Client{
 			Timeout: 10 * time.Second,
 		}
 	}
 
+	var cache PriceCache
+	if len(priceCache) > 0 {
+		cache = priceCache[0]
+	}
+
 	return &BinanceClient{
 		httpClient: httpClient,
+		priceCache: cache,
 	}
 }
 
@@ -124,18 +132,19 @@ func (b *BinanceClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSe
 			return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert locked balance to float: %w", err)
 		}
 
-		if free+locked <= 0 {
+		amount := free + locked
+		if amount <= 0 {
 			continue
 		}
 
 		count++
 
-		value, err := b.GetAssetValueUSDT(ctx, balance.Asset, free, locked)
+		price, err := b.GetAssetPriceUSDT(ctx, balance.Asset)
 		if err != nil {
 			continue
 		}
 
-		sum += value
+		sum += price * amount
 	}
 
 	return ExchangeBalanceResult{
@@ -146,14 +155,23 @@ func (b *BinanceClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSe
 	}, nil
 }
 
-func (b *BinanceClient) GetAssetValueUSDT(ctx context.Context, asset string, free, locked float64) (float64, error) {
-	amount := free + locked
-	if amount <= 0 {
-		return 0, nil
+func (b *BinanceClient) GetAssetPriceUSDT(ctx context.Context, asset string) (float64, error) {
+	asset = strings.ToUpper(strings.TrimSpace(asset))
+	if asset == "" {
+		return 0, fmt.Errorf("asset is empty")
 	}
 
 	if asset == "USDT" {
-		return amount, nil
+		return 1, nil
+	}
+
+	if b.priceCache != nil {
+		key := priceCacheKey("binance", asset)
+
+		cachedPrice, err := b.priceCache.GetPrice(ctx, key)
+		if err == nil {
+			return cachedPrice, nil
+		}
 	}
 
 	url := fmt.Sprintf(
@@ -190,5 +208,10 @@ func (b *BinanceClient) GetAssetValueUSDT(ctx context.Context, asset string, fre
 		return 0, fmt.Errorf("couldn't convert binance price to float: %w", err)
 	}
 
-	return price * amount, nil
+	if b.priceCache != nil {
+		key := priceCacheKey("binance", asset)
+		_ = b.priceCache.SetPrice(ctx, key, price)
+	}
+
+	return price, nil
 }
