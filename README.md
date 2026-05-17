@@ -33,8 +33,7 @@
     MASTER_KEY=ровно_32_символа_для_AES_256_GCM_шифрования
 
 4) Сборка и запуск контейнеров: `docker compose up -d --build`
-5) Запуск фронтенда: `flutter run`
-6) В Android Studio запуск через: `flutter run`
+5) В Android Studio запуск через: `flutter run`
 
 ## Описание экранов:
 
