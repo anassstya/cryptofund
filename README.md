@@ -19,15 +19,23 @@
 3) Настройка переменных окружения: `cp .env.example .env`
 Обязальено необходимо заполнить .env файл
    - **PostgreSQL**
+   
    POSTGRES_USER=cryptofund_dev
+   
    POSTGRES_PASSWORD=secure_password_123
+
    POSTGRES_DB=cryptofund_db
 
    - **Бэкенд**
+   
     JWT_SECRET=минимум_32_случайных_символа_для_подписи_токенов
+
     MASTER_KEY=ровно_32_символа_для_AES_256_GCM_шифрования
+
     PORT=8080
+
     LOG_LEVEL=debug
+
 4) Сборка и запуск контейнеров: `docker compose up -d --build`
 5) Запуск фронтенда: `flutter run`
 6) В Android Studio запуск через: `flutter run`
