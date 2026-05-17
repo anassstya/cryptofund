@@ -72,7 +72,7 @@ func decipherKey(encryptedKey, masterKey string) (string, error) {
 }
 
 func (s *ServiceExchanges) UpdateWorker(ctx context.Context, userID string) {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(3 * time.Minute)
 	defer ticker.Stop()
 
 	for {
@@ -144,9 +144,26 @@ func (s *ServiceExchanges) refreshOneExchange(ctx context.Context, ex ExchangeFo
 }
 
 func (s *ServiceExchanges) refreshMockExchange(ctx context.Context, ex ExchangeForUpdate) error {
-	newBalance := ex.Balance + updateDemoBalances()
+	currentBalance, err := s.repo.GetBalanceByExchangeID(ctx, ex.ID)
+	if err != nil {
+		return fmt.Errorf("error getting current mock balance: %w", err)
+	}
+
+	newBalance := currentBalance.Balance + updateDemoBalances()
 	if newBalance < 0 {
 		newBalance = 0
+	}
+
+	pairs := currentBalance.Pairs
+	if pairs == nil {
+		pairs = []clients.Pair{}
+	}
+
+	pairs = scalePairsToBalance(pairs, newBalance)
+
+	assetsCount := len(pairs)
+	if assetsCount == 0 {
+		assetsCount = ex.AssetsCount
 	}
 
 	percentChange, err := s.calculateOneHourChangePercent(ctx, ex.ID, newBalance)
@@ -159,8 +176,9 @@ func (s *ServiceExchanges) refreshMockExchange(ctx context.Context, ex ExchangeF
 		ex.ID,
 		newBalance,
 		percentChange,
-		ex.AssetsCount,
+		assetsCount,
 		"mock",
+		pairs,
 	)
 	if err != nil {
 		return fmt.Errorf("error updating mock balance: %w", err)
@@ -202,6 +220,11 @@ func (s *ServiceExchanges) refreshLiveExchange(ctx context.Context, ex ExchangeF
 		source = "live"
 	}
 
+	pairs := res.Pairs
+	if pairs == nil {
+		pairs = []clients.Pair{}
+	}
+
 	percentChange, err := s.calculateOneHourChangePercent(ctx, ex.ID, res.Balance)
 	if err != nil {
 		return fmt.Errorf("error calculating live one hour change: %w", err)
@@ -214,6 +237,7 @@ func (s *ServiceExchanges) refreshLiveExchange(ctx context.Context, ex ExchangeF
 		percentChange,
 		res.AssetsCount,
 		source,
+		pairs,
 	)
 	if err != nil {
 		return fmt.Errorf("error updating live balance: %w", err)
@@ -238,4 +262,65 @@ func (s *ServiceExchanges) calculateOneHourChangePercent(ctx context.Context, ex
 	}
 
 	return calculatePercentageChange(currentBalance, balanceOneHourAgo), nil
+}
+
+func calculatePairsTotalUSDT(pairs []clients.Pair) float64 {
+	total := 0.0
+
+	for _, pair := range pairs {
+		if pair.ValueUSDT > 0 {
+			total += pair.ValueUSDT
+			continue
+		}
+
+		if pair.Amount > 0 && pair.PriceUSDT > 0 {
+			total += pair.Amount * pair.PriceUSDT
+		}
+	}
+
+	return total
+}
+
+func scalePairsToBalance(pairs []clients.Pair, targetBalance float64) []clients.Pair {
+	if len(pairs) == 0 {
+		return []clients.Pair{}
+	}
+
+	if targetBalance <= 0 {
+		return []clients.Pair{}
+	}
+
+	currentTotal := calculatePairsTotalUSDT(pairs)
+	if currentTotal <= 0 {
+		return pairs
+	}
+
+	ratio := targetBalance / currentTotal
+
+	scaledPairs := make([]clients.Pair, 0, len(pairs))
+
+	for _, pair := range pairs {
+		valueUSDT := pair.ValueUSDT
+		if valueUSDT <= 0 && pair.Amount > 0 && pair.PriceUSDT > 0 {
+			valueUSDT = pair.Amount * pair.PriceUSDT
+		}
+
+		newValueUSDT := valueUSDT * ratio
+
+		newAmount := pair.Amount
+		if pair.PriceUSDT > 0 {
+			newAmount = newValueUSDT / pair.PriceUSDT
+		} else {
+			newAmount = pair.Amount * ratio
+		}
+
+		scaledPairs = append(scaledPairs, clients.Pair{
+			Name:      pair.Name,
+			Amount:    newAmount,
+			PriceUSDT: pair.PriceUSDT,
+			ValueUSDT: newValueUSDT,
+		})
+	}
+
+	return scaledPairs
 }

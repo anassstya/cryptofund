@@ -2,6 +2,8 @@ package exchanges
 
 import (
 	"context"
+	"cryptofund/internal/exchanges/clients"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -59,10 +61,14 @@ func (r *RepositoryExchanges) GetByUserID(ctx context.Context, userID string) ([
 	}
 
 	rows, err := r.db.Query(ctx,
-		`SELECT id, name
-		 FROM exchanges
-		 WHERE user_id = $1
-		 ORDER BY created_at DESC`,
+		`SELECT 
+			ex.id,
+			ex.name,
+			COALESCE(eb.pairs, '[]'::jsonb)
+		FROM exchanges ex
+		LEFT JOIN exchange_balance eb ON eb.exchange_id = ex.id
+		WHERE ex.user_id = $1
+		ORDER BY ex.created_at DESC`,
 		userID,
 	)
 	if err != nil {
@@ -74,10 +80,25 @@ func (r *RepositoryExchanges) GetByUserID(ctx context.Context, userID string) ([
 
 	for rows.Next() {
 		var ex ExchangeCreateResponse
+		var pairsJSON []byte
 
-		err := rows.Scan(&ex.ID, &ex.Name)
+		err := rows.Scan(
+			&ex.ID,
+			&ex.Name,
+			&pairsJSON,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("repository: scan exchange: %w", err)
+		}
+
+		if len(pairsJSON) > 0 {
+			if err := json.Unmarshal(pairsJSON, &ex.Pairs); err != nil {
+				return nil, fmt.Errorf("repository: unmarshal exchange pairs: %w", err)
+			}
+		}
+
+		if ex.Pairs == nil {
+			ex.Pairs = []clients.Pair{}
 		}
 
 		exchanges = append(exchanges, ex)
@@ -97,6 +118,7 @@ func (r *RepositoryExchanges) AddBalanceByExchangeID(
 	changePercent float64,
 	assetsCount int,
 	source string,
+	pairs []clients.Pair,
 ) error {
 	if id == "" {
 		return fmt.Errorf("repository: exchange id is empty")
@@ -106,26 +128,38 @@ func (r *RepositoryExchanges) AddBalanceByExchangeID(
 		source = "mock"
 	}
 
-	_, err := r.db.Exec(ctx,
+	if pairs == nil {
+		pairs = []clients.Pair{}
+	}
+
+	pairsJSON, err := json.Marshal(pairs)
+	if err != nil {
+		return fmt.Errorf("repository: marshal pairs: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx,
 		`INSERT INTO exchange_balance (
 			exchange_id,
 			total_balance,
 			change_percent,
 			assets_count,
-			source
+			source,
+			pairs
 		)
-		VALUES ($1, $2, $3, $4, $5)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb)
 		ON CONFLICT (exchange_id) DO UPDATE SET
 			total_balance = EXCLUDED.total_balance,
 			change_percent = EXCLUDED.change_percent,
 			assets_count = EXCLUDED.assets_count,
 			source = EXCLUDED.source,
+			pairs = EXCLUDED.pairs,
 			updated_at = NOW()`,
 		id,
 		balance,
 		changePercent,
 		assetsCount,
 		source,
+		string(pairsJSON),
 	)
 
 	if err != nil {
@@ -135,43 +169,6 @@ func (r *RepositoryExchanges) AddBalanceByExchangeID(
 	return nil
 }
 
-func (r *RepositoryExchanges) GetBalanceByExchangeID(ctx context.Context, id string) (ExchangeBalanceResponse, error) {
-	if id == "" {
-		return ExchangeBalanceResponse{}, fmt.Errorf("repository: exchange id is empty")
-	}
-
-	var res ExchangeBalanceResponse
-
-	err := r.db.QueryRow(ctx,
-		`SELECT 
-			ex.id,
-			ex.name,
-			eb.total_balance,
-			eb.change_percent,
-			eb.assets_count,
-			eb.source,
-			eb.updated_at
-		FROM exchange_balance eb
-		JOIN exchanges ex ON eb.exchange_id = ex.id
-		WHERE eb.exchange_id = $1`,
-		id,
-	).Scan(
-		&res.ID,
-		&res.Name,
-		&res.Balance,
-		&res.ChangePercent,
-		&res.AssetsCount,
-		&res.Source,
-		&res.UpdatedAt,
-	)
-
-	if err != nil {
-		return ExchangeBalanceResponse{}, fmt.Errorf("repository: get balance: %w", err)
-	}
-
-	return res, nil
-}
-
 func (r *RepositoryExchanges) GetMockBalancesByUserID(ctx context.Context, userID string) ([]ExchangeBalanceResponse, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("repository: user id is empty")
@@ -179,18 +176,19 @@ func (r *RepositoryExchanges) GetMockBalancesByUserID(ctx context.Context, userI
 
 	rows, err := r.db.Query(ctx,
 		`SELECT 
-			ex.id,
-			ex.name,
-			eb.total_balance,
-			eb.change_percent,
-			eb.assets_count,
-			eb.source,
-			eb.updated_at
-		FROM exchange_balance eb
-		JOIN exchanges ex ON eb.exchange_id = ex.id
-		WHERE ex.user_id = $1
-		  AND eb.source = 'mock'
-		ORDER BY eb.updated_at ASC`,
+		ex.id,
+		ex.name,
+		eb.total_balance,
+		eb.change_percent,
+		eb.assets_count,
+		eb.source,
+		eb.updated_at,
+		eb.pairs
+	FROM exchange_balance eb
+	JOIN exchanges ex ON eb.exchange_id = ex.id
+	WHERE ex.user_id = $1
+	  AND eb.source = 'mock'
+	ORDER BY eb.updated_at ASC`,
 		userID,
 	)
 	if err != nil {
@@ -202,6 +200,7 @@ func (r *RepositoryExchanges) GetMockBalancesByUserID(ctx context.Context, userI
 
 	for rows.Next() {
 		var balance ExchangeBalanceResponse
+		var pairsJSON []byte
 
 		err := rows.Scan(
 			&balance.ID,
@@ -211,9 +210,20 @@ func (r *RepositoryExchanges) GetMockBalancesByUserID(ctx context.Context, userI
 			&balance.AssetsCount,
 			&balance.Source,
 			&balance.UpdatedAt,
+			&pairsJSON,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("repository: scan user mock balance: %w", err)
+		}
+
+		if len(pairsJSON) > 0 {
+			if err := json.Unmarshal(pairsJSON, &balance.Pairs); err != nil {
+				return nil, fmt.Errorf("repository: unmarshal mock pairs: %w", err)
+			}
+		}
+
+		if balance.Pairs == nil {
+			balance.Pairs = []clients.Pair{}
 		}
 
 		balances = append(balances, balance)
@@ -326,4 +336,54 @@ func (r *RepositoryExchanges) GetBalanceOneHourAgo(ctx context.Context, exchange
 	}
 
 	return balance, true, nil
+}
+
+func (r *RepositoryExchanges) GetBalanceByExchangeID(ctx context.Context, id string) (ExchangeBalanceResponse, error) {
+	if id == "" {
+		return ExchangeBalanceResponse{}, fmt.Errorf("repository: exchange id is empty")
+	}
+
+	var res ExchangeBalanceResponse
+	var pairsJSON []byte
+
+	err := r.db.QueryRow(ctx,
+		`SELECT 
+			ex.id,
+			ex.name,
+			eb.total_balance,
+			eb.change_percent,
+			eb.assets_count,
+			eb.source,
+			eb.updated_at,
+			eb.pairs
+		FROM exchange_balance eb
+		JOIN exchanges ex ON eb.exchange_id = ex.id
+		WHERE eb.exchange_id = $1`,
+		id,
+	).Scan(
+		&res.ID,
+		&res.Name,
+		&res.Balance,
+		&res.ChangePercent,
+		&res.AssetsCount,
+		&res.Source,
+		&res.UpdatedAt,
+		&pairsJSON,
+	)
+
+	if err != nil {
+		return ExchangeBalanceResponse{}, fmt.Errorf("repository: get balance: %w", err)
+	}
+
+	if len(pairsJSON) > 0 {
+		if err := json.Unmarshal(pairsJSON, &res.Pairs); err != nil {
+			return ExchangeBalanceResponse{}, fmt.Errorf("repository: unmarshal pairs: %w", err)
+		}
+	}
+
+	if res.Pairs == nil {
+		res.Pairs = []clients.Pair{}
+	}
+
+	return res, nil
 }

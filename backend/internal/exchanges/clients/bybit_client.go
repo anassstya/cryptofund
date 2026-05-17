@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -28,7 +29,10 @@ type bybitAccount struct {
 }
 
 type bybitCoin struct {
-	UsdValue string `json:"usdValue"`
+	Coin          string `json:"coin"`
+	Equity        string `json:"equity"`
+	WalletBalance string `json:"walletBalance"`
+	UsdValue      string `json:"usdValue"`
 }
 
 type BybitClient struct {
@@ -85,46 +89,88 @@ func (b *BybitClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecr
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return ExchangeBalanceResult{}, fmt.Errorf("%w: bybit returned status %d", ErrExchangeUnavailable, resp.StatusCode)
+		return ExchangeBalanceResult{}, fmt.Errorf(
+			"%w: bybit returned status %d",
+			ErrExchangeUnavailable,
+			resp.StatusCode,
+		)
 	}
 
 	var res bybitResponse
 	err = json.NewDecoder(resp.Body).Decode(&res)
 	if err != nil {
-		return ExchangeBalanceResult{}, fmt.Errorf("error decoding %v", err)
+		return ExchangeBalanceResult{}, fmt.Errorf("error decoding bybit response: %w", err)
 	}
 
 	if res.RetCode != 0 {
-		return ExchangeBalanceResult{}, fmt.Errorf("%w: bybit retCode=%d retMsg=%s", ErrInvalidCredentials, res.RetCode, res.RetMsg)
+		return ExchangeBalanceResult{}, fmt.Errorf(
+			"%w: bybit retCode=%d retMsg=%s",
+			ErrInvalidCredentials,
+			res.RetCode,
+			res.RetMsg,
+		)
 	}
 
 	if len(res.Result.List) == 0 {
 		return ExchangeBalanceResult{}, fmt.Errorf("%w: empty bybit balance list", ErrExchangeUnavailable)
 	}
 
-	sum, err := strconv.ParseFloat(res.Result.List[0].TotalEquity, 64)
-	if err != nil {
-		return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert to float: %w", err)
-	}
+	account := res.Result.List[0]
 
+	sum := 0.0
 	count := 0
-	for _, v := range res.Result.List[0].Coin {
-		if v.UsdValue == "" {
+	pairs := []Pair{}
+
+	for _, coin := range account.Coin {
+		asset := strings.ToUpper(strings.TrimSpace(coin.Coin))
+		if asset == "" {
 			continue
 		}
 
-		q, err := strconv.ParseFloat(v.UsdValue, 64)
+		if coin.UsdValue == "" {
+			continue
+		}
+
+		valueUSDT, err := strconv.ParseFloat(coin.UsdValue, 64)
 		if err != nil {
 			return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert usdValue to float: %w", err)
 		}
-		if q > 0 {
-			count++
+
+		if valueUSDT < minAssetValueUSDT {
+			continue
 		}
+
+		amount := 0.0
+
+		if coin.Equity != "" {
+			amount, _ = strconv.ParseFloat(coin.Equity, 64)
+		}
+
+		if amount == 0 && coin.WalletBalance != "" {
+			amount, _ = strconv.ParseFloat(coin.WalletBalance, 64)
+		}
+
+		priceUSDT := 0.0
+		if amount > 0 {
+			priceUSDT = valueUSDT / amount
+		}
+
+		count++
+
+		pairs = append(pairs, Pair{
+			Name:      asset,
+			Amount:    amount,
+			PriceUSDT: priceUSDT,
+			ValueUSDT: valueUSDT,
+		})
+
+		sum += valueUSDT
 	}
 
 	return ExchangeBalanceResult{
 		Balance:     sum,
 		AssetsCount: count,
 		Source:      "live",
+		Pairs:       pairs,
 	}, nil
 }

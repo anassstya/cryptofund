@@ -6,7 +6,33 @@
     "total_balance": 1056.324,
     "change_percent": -2.11,
     "assets_count": 4,
-    "source": "mock"
+    "source": "mock",
+    "pairs": [
+      {
+        "name": "BTC",
+        "amount": 0.006,
+        "price_usdt": 80000,
+        "value_usdt": 480
+      },
+      {
+        "name": "ETH",
+        "amount": 0.12,
+        "price_usdt": 2600,
+        "value_usdt": 312
+      },
+      {
+        "name": "BNB",
+        "amount": 0.35,
+        "price_usdt": 600,
+        "value_usdt": 210
+      },
+      {
+        "name": "USDT",
+        "amount": 54.324,
+        "price_usdt": 1,
+        "value_usdt": 54.324
+      }
+    ]
   },
   {
     "name": "Bybit",
@@ -15,7 +41,57 @@
     "total_balance": 54049.553,
     "change_percent": 5,
     "assets_count": 8,
-    "source": "mock"
+    "source": "mock",
+    "pairs": [
+      {
+        "name": "BTC",
+        "amount": 0.45,
+        "price_usdt": 80000,
+        "value_usdt": 36000
+      },
+      {
+        "name": "ETH",
+        "amount": 4,
+        "price_usdt": 2600,
+        "value_usdt": 10400
+      },
+      {
+        "name": "SOL",
+        "amount": 20,
+        "price_usdt": 150,
+        "value_usdt": 3000
+      },
+      {
+        "name": "XRP",
+        "amount": 1000,
+        "price_usdt": 2,
+        "value_usdt": 2000
+      },
+      {
+        "name": "USDT",
+        "amount": 1500,
+        "price_usdt": 1,
+        "value_usdt": 1500
+      },
+      {
+        "name": "DOGE",
+        "amount": 3000,
+        "price_usdt": 0.16,
+        "value_usdt": 480
+      },
+      {
+        "name": "TON",
+        "amount": 200,
+        "price_usdt": 3,
+        "value_usdt": 600
+      },
+      {
+        "name": "LINK",
+        "amount": 4.63686667,
+        "price_usdt": 15,
+        "value_usdt": 69.553
+      }
+    ]
   },
   {
     "name": "Bitget",
@@ -24,7 +100,27 @@
     "total_balance": 1012.434,
     "change_percent": -0.4,
     "assets_count": 3,
-    "source": "mock"
+    "source": "mock",
+    "pairs": [
+      {
+        "name": "BTC",
+        "amount": 0.008,
+        "price_usdt": 80000,
+        "value_usdt": 640
+      },
+      {
+        "name": "ETH",
+        "amount": 0.1,
+        "price_usdt": 2600,
+        "value_usdt": 260
+      },
+      {
+        "name": "USDT",
+        "amount": 112.434,
+        "price_usdt": 1,
+        "value_usdt": 112.434
+      }
+    ]
   },
   {
     "name": "Mexc",
@@ -33,15 +129,103 @@
     "total_balance": 93291.001,
     "change_percent": -0.4,
     "assets_count": 12,
-    "source": "mock"
+    "source": "mock",
+    "pairs": [
+      {
+        "name": "BTC",
+        "amount": 1,
+        "price_usdt": 80000,
+        "value_usdt": 80000
+      },
+      {
+        "name": "ETH",
+        "amount": 3,
+        "price_usdt": 2600,
+        "value_usdt": 7800
+      },
+      {
+        "name": "SOL",
+        "amount": 20,
+        "price_usdt": 150,
+        "value_usdt": 3000
+      },
+      {
+        "name": "XRP",
+        "amount": 500,
+        "price_usdt": 2,
+        "value_usdt": 1000
+      },
+      {
+        "name": "BNB",
+        "amount": 1,
+        "price_usdt": 600,
+        "value_usdt": 600
+      },
+      {
+        "name": "DOGE",
+        "amount": 2000,
+        "price_usdt": 0.16,
+        "value_usdt": 320
+      },
+      {
+        "name": "ADA",
+        "amount": 300,
+        "price_usdt": 0.5,
+        "value_usdt": 150
+      },
+      {
+        "name": "TON",
+        "amount": 50,
+        "price_usdt": 3,
+        "value_usdt": 150
+      },
+      {
+        "name": "LINK",
+        "amount": 10,
+        "price_usdt": 15,
+        "value_usdt": 150
+      },
+      {
+        "name": "TRX",
+        "amount": 500,
+        "price_usdt": 0.1,
+        "value_usdt": 50
+      },
+      {
+        "name": "USDT",
+        "amount": 60,
+        "price_usdt": 1,
+        "value_usdt": 60
+      },
+      {
+        "name": "AVAX",
+        "amount": 0.30558333,
+        "price_usdt": 36,
+        "value_usdt": 11.001
+      }
+    ]
   },
   {
     "name": "Gate",
     "api_key": "gate_demo_api_key_001",
     "api_secret": "gate_demo_api_secret_001",
-    "total_balance": 204.030,
+    "total_balance": 204.03,
     "change_percent": 0.23,
     "assets_count": 2,
-    "source": "mock"
+    "source": "mock",
+    "pairs": [
+      {
+        "name": "USDT",
+        "amount": 100,
+        "price_usdt": 1,
+        "value_usdt": 100
+      },
+      {
+        "name": "ETH",
+        "amount": 0.04001154,
+        "price_usdt": 2600,
+        "value_usdt": 104.03
+      }
+    ]
   }
 ]

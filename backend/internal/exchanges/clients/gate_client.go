@@ -114,8 +114,14 @@ func (g *GateClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 
 	sum := 0.0
 	count := 0
+	pairs := []Pair{}
 
 	for _, balance := range balances {
+		asset := strings.ToUpper(strings.TrimSpace(balance.Currency))
+		if asset == "" {
+			continue
+		}
+
 		available, err := strconv.ParseFloat(balance.Available, 64)
 		if err != nil {
 			continue
@@ -131,14 +137,27 @@ func (g *GateClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 			continue
 		}
 
-		count++
-
-		price, err := g.GetAssetPriceUSDT(ctx, balance.Currency)
+		price, err := g.GetAssetPriceUSDT(ctx, asset)
 		if err != nil {
 			continue
 		}
 
-		sum += price * amount
+		valueUSDT := price * amount
+
+		if valueUSDT < minAssetValueUSDT {
+			continue
+		}
+
+		count++
+
+		pairs = append(pairs, Pair{
+			Name:      asset,
+			Amount:    amount,
+			PriceUSDT: price,
+			ValueUSDT: valueUSDT,
+		})
+
+		sum += valueUSDT
 	}
 
 	return ExchangeBalanceResult{
@@ -146,6 +165,7 @@ func (g *GateClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 		ChangePercent: 0,
 		AssetsCount:   count,
 		Source:        "live",
+		Pairs:         pairs,
 	}, nil
 }
 

@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const minAssetValueUSDT = 0.5
+
 type mexcAccountResponse struct {
 	Balances []mexcBalance `json:"balances"`
 }
@@ -116,9 +118,13 @@ func (m *MexcClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 
 	sum := 0.0
 	count := 0
+	pairs := []Pair{}
 
 	for _, v := range data.Balances {
 		asset := strings.ToUpper(strings.TrimSpace(v.Asset))
+		if asset == "" {
+			continue
+		}
 
 		free, err := strconv.ParseFloat(v.Free, 64)
 		if err != nil {
@@ -134,8 +140,6 @@ func (m *MexcClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 		if amount <= 0 {
 			continue
 		}
-
-		count++
 
 		price := 0.0
 
@@ -167,13 +171,29 @@ func (m *MexcClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSecre
 			}
 		}
 
-		sum += price * amount
+		valueUSDT := amount * price
+
+		if valueUSDT < minAssetValueUSDT {
+			continue
+		}
+
+		count++
+
+		pairs = append(pairs, Pair{
+			Name:      asset,
+			Amount:    amount,
+			PriceUSDT: price,
+			ValueUSDT: valueUSDT,
+		})
+
+		sum += valueUSDT
 	}
 
 	return ExchangeBalanceResult{
 		Balance:     sum,
 		AssetsCount: count,
 		Source:      "live",
+		Pairs:       pairs,
 	}, nil
 }
 

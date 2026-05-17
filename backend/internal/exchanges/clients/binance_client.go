@@ -120,8 +120,14 @@ func (b *BinanceClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSe
 
 	sum := 0.0
 	count := 0
+	pairs := []Pair{}
 
 	for _, balance := range data.Balances {
+		asset := strings.ToUpper(strings.TrimSpace(balance.Asset))
+		if asset == "" {
+			continue
+		}
+
 		free, err := strconv.ParseFloat(balance.Free, 64)
 		if err != nil {
 			return ExchangeBalanceResult{}, fmt.Errorf("couldn't convert free balance to float: %w", err)
@@ -137,14 +143,27 @@ func (b *BinanceClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSe
 			continue
 		}
 
-		count++
-
-		price, err := b.GetAssetPriceUSDT(ctx, balance.Asset)
+		price, err := b.GetAssetPriceUSDT(ctx, asset)
 		if err != nil {
 			continue
 		}
 
-		sum += price * amount
+		valueUSDT := price * amount
+
+		if valueUSDT < minAssetValueUSDT {
+			continue
+		}
+
+		count++
+
+		pairs = append(pairs, Pair{
+			Name:      asset,
+			Amount:    amount,
+			PriceUSDT: price,
+			ValueUSDT: valueUSDT,
+		})
+
+		sum += valueUSDT
 	}
 
 	return ExchangeBalanceResult{
@@ -152,6 +171,7 @@ func (b *BinanceClient) ValidateAndGetBalance(ctx context.Context, apiKey, apiSe
 		ChangePercent: 0,
 		AssetsCount:   count,
 		Source:        "live",
+		Pairs:         pairs,
 	}, nil
 }
 

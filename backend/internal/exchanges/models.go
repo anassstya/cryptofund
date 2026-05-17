@@ -1,6 +1,9 @@
 package exchanges
 
-import "time"
+import (
+	"cryptofund/internal/exchanges/clients"
+	"time"
+)
 
 type Exchange struct {
 	ID        string `json:"id"`
@@ -11,28 +14,32 @@ type Exchange struct {
 }
 
 type ExchangeCreateResponse struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID    string         `json:"id"`
+	Name  string         `json:"name"`
+	Pairs []clients.Pair `json:"pairs,omitempty"`
 }
 
 type ExchangeBalanceResponse struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	Balance       float64   `json:"total_balance"`
-	ChangePercent float64   `json:"change_percent"`
-	AssetsCount   int       `json:"assets_count"`
-	Source        string    `json:"source"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID            string         `json:"id"`
+	Name          string         `json:"name"`
+	Balance       float64        `json:"total_balance"`
+	ChangePercent float64        `json:"change_percent"`
+	AssetsCount   int            `json:"assets_count"`
+	Source        string         `json:"source"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	Pairs         []clients.Pair `json:"pairs"`
 }
 
 type DemoExchange struct {
-	Name          string  `json:"name"`
-	APIKey        string  `json:"api_key"`
-	APISecret     string  `json:"api_secret"`
-	Balance       float64 `json:"total_balance"`
-	ChangePercent float64 `json:"change_percent"`
-	AssetsCount   int     `json:"assets_count"`
-	Source        string  `json:"source"`
+	Name          string         `json:"name"`
+	APIKey        string         `json:"api_key"`
+	APISecret     string         `json:"api_secret"`
+	Balance       float64        `json:"total_balance"`
+	ChangePercent float64        `json:"change_percent"`
+	AssetsCount   int            `json:"assets_count"`
+	Source        string         `json:"source"`
+
+	Pairs         []clients.Pair `json:"pairs"`
 }
 
 type ExchangeForUpdate struct {

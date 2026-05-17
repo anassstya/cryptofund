@@ -19,7 +19,8 @@ import (
 type Repository interface {
 	AddExchange(ctx context.Context, userID, name, keyAPI, secretAPI, credentialsHash string) (string, error)
 	GetByUserID(ctx context.Context, userID string) ([]ExchangeCreateResponse, error)
-	AddBalanceByExchangeID(ctx context.Context, id string, balance float64, changePercent float64, assetsCount int, source string) error
+	AddBalanceByExchangeID(ctx context.Context, id string, balance float64, changePercent float64, assetsCount int, source string, pairs []clients.Pair) error
+
 	GetBalanceByExchangeID(ctx context.Context, id string) (ExchangeBalanceResponse, error)
 
 	GetBalanceOneHourAgo(ctx context.Context, exchangeID string) (float64, bool, error)
@@ -116,9 +117,10 @@ func (s *ServiceExchanges) AddExchange(ctx context.Context, userID, name, keyAPI
 
 		balance = clients.ExchangeBalanceResult{
 			Balance:       data.Balance,
-			ChangePercent: 0,
+			ChangePercent: data.ChangePercent,
 			AssetsCount:   data.AssetsCount,
 			Source:        source,
+			Pairs:         data.Pairs,
 		}
 	} else {
 		exchangeKey := strings.ToLower(strings.TrimSpace(name))
@@ -140,9 +142,10 @@ func (s *ServiceExchanges) AddExchange(ctx context.Context, userID, name, keyAPI
 
 		balance = clients.ExchangeBalanceResult{
 			Balance:       res.Balance,
-			ChangePercent: 0,
+			ChangePercent: res.ChangePercent,
 			AssetsCount:   res.AssetsCount,
 			Source:        source,
+			Pairs:         res.Pairs,
 		}
 	}
 
@@ -170,6 +173,7 @@ func (s *ServiceExchanges) AddExchange(ctx context.Context, userID, name, keyAPI
 		balance.ChangePercent,
 		balance.AssetsCount,
 		balance.Source,
+		balance.Pairs,
 	)
 	if err != nil {
 		return ExchangeCreateResponse{}, fmt.Errorf("error adding balance to db: %w", err)
@@ -181,8 +185,9 @@ func (s *ServiceExchanges) AddExchange(ctx context.Context, userID, name, keyAPI
 	}
 
 	return ExchangeCreateResponse{
-		ID:   id,
-		Name: name,
+		ID:    id,
+		Name:  name,
+		Pairs: balance.Pairs,
 	}, nil
 }
 

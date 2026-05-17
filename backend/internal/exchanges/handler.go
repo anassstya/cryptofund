@@ -65,6 +65,7 @@ func (s *HandlerExchanges) AddExchangeHandler(w http.ResponseWriter, r *http.Req
 
 	if err != nil {
 		if errors.Is(err, ErrExchangeAlreadyExists) {
+			log.Printf("ошибка в добавлении в ьд: %w", ErrExchangeAlreadyExists)
 			writeJSON(w, http.StatusConflict, map[string]string{
 				"error":   "exchange_already_exists",
 				"message": "Такая биржа уже добавлена",
@@ -107,11 +108,13 @@ func (s *HandlerExchanges) GetExchangesWithBalanceHandler(w http.ResponseWriter,
 	res := make([]ExchangeBalanceResponse, 0)
 
 	for _, v := range usersExchanges {
+		log.Printf("🔎 Обработка биржи: v.ID='%s', v.Name='%s'", v.ID, v.Name)
 		a, err := s.serv.GetBalanceByExchangeID(r.Context(), v.ID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "error getting balance"})
 			return
 		}
+
 		res = append(res, a)
 	}
 
