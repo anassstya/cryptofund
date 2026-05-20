@@ -8,7 +8,7 @@
 ## Технологический стек:
 | Направление | Инструменты                                                                    |
 |-------------|--------------------------------------------------------------------------------|
-| Backend     | Go 1.21+, pgx/pgxpool, REST API, AES-GCM, sync/context, Docker                 | 
+| Backend     | Go 1.21+, pgx/pgxpool, REST API, AES-GCM, sync/context, Docker, Redis          | 
 | Frontend    | Flutter, Dart, flutter_bloc (Cubit), http, flutter_secure_storage, CustomPaint | 
 | DataBase    | PostgreSQL 15+, индексы, JSON для хранения пар активов                         | 
 

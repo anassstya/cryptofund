@@ -115,10 +115,12 @@ func (s *ServiceExchanges) AddExchange(ctx context.Context, userID, name, keyAPI
 			source = "mock"
 		}
 
+		realBalance := calculatePairsTotalUSDT(data.Pairs)
+
 		balance = clients.ExchangeBalanceResult{
-			Balance:       data.Balance,
+			Balance:       realBalance,
 			ChangePercent: data.ChangePercent,
-			AssetsCount:   data.AssetsCount,
+			AssetsCount:   len(data.Pairs),
 			Source:        source,
 			Pairs:         data.Pairs,
 		}
